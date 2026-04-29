@@ -1,5 +1,6 @@
 package br.edu.unifesspa.uniplus.keycloak.cpfmatcher;
 
+import java.util.List;
 import java.util.Optional;
 import org.jboss.logging.Logger;
 import org.keycloak.authentication.AuthenticationFlowContext;
@@ -97,25 +98,49 @@ public final class CpfMatcherAuthenticator extends AbstractIdpAuthenticator {
      * Busca um user pelo CPF canônico. Se nada for encontrado e o CPF iniciar com
      * zero, tenta fallback pela forma truncada (10 dígitos) — caso típico do LDAP
      * institucional malformado. Retorna a tentativa que sucedeu, ou empty.
+     *
+     * <p>Quando a busca devolve mais de um user para o mesmo CPF (atributo não
+     * é unique no Keycloak), o matching é abortado para evitar associação
+     * incorreta entre identidade gov.br e conta — risco LGPD relevante.
      */
     Optional<MatchResult> findMatchingUser(AuthenticationFlowContext context, CanonicalCpf cpf) {
-        UserModel direct = findUserByAttribute(context, CPF_USER_ATTRIBUTE, cpf.value());
-        if (direct != null) {
-            return Optional.of(new MatchResult(direct, /* viaFallback */ false));
+        List<UserModel> directMatches = searchUsersByAttribute(context, CPF_USER_ATTRIBUTE, cpf.value());
+        if (directMatches.size() > 1) {
+            LOG.warnf("CPF matcher: matching ambíguo no formato canônico — cpf=%s, %d+ users compartilham o atributo. "
+                + "Recusando link automático para evitar associação incorreta.", cpf.masked(), directMatches.size());
+            return Optional.empty();
+        }
+        if (directMatches.size() == 1) {
+            return Optional.of(new MatchResult(directMatches.get(0), /* viaFallback */ false));
         }
 
-        return cpf.truncated()
-            .map(truncated -> findUserByAttribute(context, CPF_USER_ATTRIBUTE, truncated))
-            .filter(java.util.Objects::nonNull)
-            .map(user -> new MatchResult(user, /* viaFallback */ true));
+        Optional<String> truncated = cpf.truncated();
+        if (truncated.isEmpty()) {
+            return Optional.empty();
+        }
+
+        List<UserModel> fallbackMatches = searchUsersByAttribute(context, CPF_USER_ATTRIBUTE, truncated.get());
+        if (fallbackMatches.size() > 1) {
+            LOG.warnf("CPF matcher: matching ambíguo no fallback truncado — cpf=%s, %d+ users compartilham o atributo. "
+                + "Recusando link automático para evitar associação incorreta.", cpf.masked(), fallbackMatches.size());
+            return Optional.empty();
+        }
+        if (fallbackMatches.size() == 1) {
+            return Optional.of(new MatchResult(fallbackMatches.get(0), /* viaFallback */ true));
+        }
+        return Optional.empty();
     }
 
-    private UserModel findUserByAttribute(AuthenticationFlowContext context,
-                                          String attributeName, String attributeValue) {
+    /**
+     * Busca limitada a 2 elementos — o suficiente para distinguir entre 0, 1 e
+     * "muitos" sem materializar streams grandes em caso de atributo mal indexado.
+     */
+    private List<UserModel> searchUsersByAttribute(AuthenticationFlowContext context,
+                                                   String attributeName, String attributeValue) {
         return context.getSession().users()
             .searchForUserByUserAttributeStream(context.getRealm(), attributeName, attributeValue)
-            .findFirst()
-            .orElse(null);
+            .limit(2)
+            .toList();
     }
 
     /**
@@ -123,9 +148,19 @@ public final class CpfMatcherAuthenticator extends AbstractIdpAuthenticator {
      * Em users LDAP-federados read-only, esta escrita afeta apenas o cache local
      * do Keycloak — o LDAP institucional permanece com o valor truncado original
      * (correção definitiva exige migração no próprio LDAP).
+     *
+     * <p>Auto-heal é best-effort: storages que rejeitam escrita (LDAP em modo
+     * READ_ONLY, indisponibilidade temporária) não devem derrubar o matching que
+     * já sucedeu — falhas são logadas e o flow prossegue.
      */
     void applyAutoHeal(UserModel user, CanonicalCpf canonicalCpf) {
-        user.setSingleAttribute(CPF_USER_ATTRIBUTE, canonicalCpf.value());
+        try {
+            user.setSingleAttribute(CPF_USER_ATTRIBUTE, canonicalCpf.value());
+        } catch (RuntimeException e) {
+            LOG.warnf("CPF matcher: auto-heal falhou para username='%s' (cpf=%s) — storage read-only ou indisponível (%s). "
+                + "Prosseguindo com o matching; correção definitiva exige migração no LDAP de origem.",
+                user.getUsername(), canonicalCpf.masked(), e.getClass().getSimpleName());
+        }
     }
 
     /**
