@@ -3,12 +3,15 @@ package br.edu.unifesspa.uniplus.keycloak.cpfmatcher;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.stream.Stream;
+import org.keycloak.models.ModelException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -216,6 +219,61 @@ class CpfMatcherAuthenticatorTest {
                 .hasSize(11)
                 .startsWith("0")
                 .isEqualTo(CPF_CANONICAL_COM_ZERO);
+        }
+
+        @Test
+        @DisplayName("autoHeal_quandoStorageReadOnly_naoQuebraFlowEContinuaRegistrandoExistingUser")
+        void autoHealReadOnlyStorageNaoQuebra() {
+            when(brokerContext.getId()).thenReturn(CPF_CANONICAL_COM_ZERO);
+            mockUserNotFound(CPF_CANONICAL_COM_ZERO);
+            mockUserFound(CPF_TRUNCATED, existingUser);
+            doThrow(new ModelException("storage is read-only"))
+                .when(existingUser).setSingleAttribute(eq("cpf"), any());
+
+            authenticator.authenticateImpl(context, serializedCtx, brokerContext);
+
+            verify(existingUser).setSingleAttribute(eq("cpf"), any());
+            verify(authSession).setAuthNote(eq(AbstractIdpAuthenticator.EXISTING_USER_INFO), any());
+            verify(context).attempted();
+        }
+    }
+
+    @Nested
+    @DisplayName("Matching ambíguo")
+    class AmbiguousMatching {
+
+        @Test
+        @DisplayName("authenticateImpl_quandoCanonicoTemMultiplosUsers_recusaLinkENaoTentaFallback")
+        void canonicoAmbiguoRecusaLink() {
+            UserModel outroUser = mock(UserModel.class);
+            when(brokerContext.getId()).thenReturn(CPF_CANONICAL_COM_ZERO);
+            when(userProvider.searchForUserByUserAttributeStream(realm, "cpf", CPF_CANONICAL_COM_ZERO))
+                .thenReturn(Stream.of(existingUser, outroUser));
+
+            authenticator.authenticateImpl(context, serializedCtx, brokerContext);
+
+            verify(userProvider, times(1)).searchForUserByUserAttributeStream(any(), any(), any());
+            verify(authSession, never())
+                .setAuthNote(eq(AbstractIdpAuthenticator.EXISTING_USER_INFO), any());
+            verify(existingUser, never()).setSingleAttribute(any(), any());
+            verify(context).attempted();
+        }
+
+        @Test
+        @DisplayName("authenticateImpl_quandoFallbackTemMultiplosUsers_recusaLinkSemAutoHeal")
+        void fallbackAmbiguoRecusaLink() {
+            UserModel outroUser = mock(UserModel.class);
+            when(brokerContext.getId()).thenReturn(CPF_CANONICAL_COM_ZERO);
+            mockUserNotFound(CPF_CANONICAL_COM_ZERO);
+            when(userProvider.searchForUserByUserAttributeStream(realm, "cpf", CPF_TRUNCATED))
+                .thenReturn(Stream.of(existingUser, outroUser));
+
+            authenticator.authenticateImpl(context, serializedCtx, brokerContext);
+
+            verify(authSession, never())
+                .setAuthNote(eq(AbstractIdpAuthenticator.EXISTING_USER_INFO), any());
+            verify(existingUser, never()).setSingleAttribute(any(), any());
+            verify(context).attempted();
         }
     }
 
