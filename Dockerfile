@@ -18,3 +18,12 @@ LABEL org.opencontainers.image.source="https://github.com/unifesspa-edu-br/unipl
       org.opencontainers.image.version="${VERSION}"
 
 COPY --from=builder /workspace/cpf-matcher/target/cpf-matcher-*.jar /opt/keycloak/providers/
+
+# Default CMD para evitar restart loop quando o operador esquece o `command:`
+# no compose/manifesto. Sem `--optimized` para manter a imagem agnóstica de
+# build-time options (KC_DB, KC_HEALTH_ENABLED, KC_FEATURES) — testes de
+# integração usam H2/dev-mem, HML e PROD usam Postgres. O preço é ~20s a
+# mais no primeiro boot enquanto o `kc.sh start` faz a augmentation com a
+# config efetiva do container; reboots subsequentes reaproveitam o cache.
+# Override em DEV: `command: ["start-dev", "--import-realm"]`.
+CMD ["start"]
