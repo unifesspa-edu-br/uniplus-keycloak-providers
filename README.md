@@ -12,7 +12,7 @@ Providers customizados em Java SPI para o **Keycloak** institucional da platafor
 
 - **Java:** 21 LTS
 - **Build:** Maven 3.9+
-- **Keycloak alvo:** 26.5.x
+- **Keycloak alvo:** 26.5.7
 
 ## Build
 
@@ -29,6 +29,58 @@ Os JARs são distribuídos como providers do Keycloak — colocados em `/opt/key
 Em ambiente de **dev local** (uniplus-api), o `docker-compose.yml` faz volume mount do JAR compilado.
 
 Em **homologação/produção**, o JAR é incluído na imagem Docker do Keycloak institucional via Helm chart (Story de operação separada, fora do escopo deste repo).
+
+## Como consumir a imagem
+
+A imagem oficial de consumo dos providers Uni+ é publicada no GHCR:
+
+```bash
+docker pull ghcr.io/unifesspa-edu-br/uniplus-keycloak:1.0.0
+```
+
+Para **DEV**, substitua a imagem base do Keycloak no `docker-compose.yml` do `uniplus-api`:
+
+```yaml
+image: ghcr.io/unifesspa-edu-br/uniplus-keycloak:1.0.0
+```
+
+Essa substituição entra no lugar de `quay.io/keycloak/keycloak:26.5`. O caminho legacy de desenvolvimento local continua suportado para quem trabalha no SPI: compilar o JAR com Maven e montar o arquivo gerado em `/opt/keycloak/providers/`.
+
+Para **HML/PRD**, o Helm chart deve apontar para a mesma imagem versionada:
+
+```text
+ghcr.io/unifesspa-edu-br/uniplus-keycloak:1.0.0
+```
+
+A imagem precisa ficar pública após o primeiro push, porque o repositório é público e DEV/HML/PRD não devem depender de autenticação para pull. No GitHub, confira em **Packages > uniplus-keycloak > Package settings > Danger Zone > Change visibility** e ajuste para **Public** se necessário.
+
+## Como fazer release
+
+1. Ajustar o `pom.xml` para a próxima versão sem `-SNAPSHOT`.
+2. Executar `mvn clean package` e validar os testes.
+3. Fazer commit e push da alteração.
+4. Criar e enviar a tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+O workflow `.github/workflows/release.yml` dispara automaticamente para tags `v*.*.*`, publica o JAR e o checksum SHA-256 no GitHub Release e envia a imagem Docker para o GHCR com as tags `1.0.0`, `1.0` e `latest`.
+
+Após a release, crie um novo commit bumpando o projeto para a próxima versão `-SNAPSHOT`.
+
+## Verificação pós-release
+
+Após publicar `v1.0.0`, valide:
+
+```bash
+curl -L -o cpf-matcher-1.0.0.jar https://github.com/unifesspa-edu-br/uniplus-keycloak-providers/releases/download/v1.0.0/cpf-matcher-1.0.0.jar
+docker pull ghcr.io/unifesspa-edu-br/uniplus-keycloak:1.0.0
+docker run --rm ghcr.io/unifesspa-edu-br/uniplus-keycloak:1.0.0 show-config
+```
+
+Ao iniciar o Keycloak em ambiente de teste, confirme nos logs que o provider `cpf-matcher` foi carregado.
 
 ## Estrutura
 

@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Java 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build JAR with tests
+        run: mvn clean package
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          minor="${version%.*}"
+          jar="cpf-matcher/target/cpf-matcher-${version}.jar"
+
+          if [ ! -f "$jar" ]; then
+            echo "::error::JAR esperado não encontrado: $jar"
+            exit 1
+          fi
+
+          sha256sum "$jar" > "${jar}.sha256"
+
+          {
+            echo "version=$version"
+            echo "minor=$minor"
+            echo "jar=$jar"
+            echo "checksum=${jar}.sha256"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER}/uniplus-keycloak"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "${{ steps.version.outputs.jar }}" \
+            "${{ steps.version.outputs.checksum }}" \
+            --title "Uni+ Keycloak ${GITHUB_REF_NAME}" \
+            --notes "Release ${GITHUB_REF_NAME} dos providers Keycloak Uni+."
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.title=Uni+ Keycloak
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          tags: |
+            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
+            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.minor }}
+            ${{ steps.version.outputs.image }}:latest
