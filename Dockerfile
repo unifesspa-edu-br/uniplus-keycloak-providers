@@ -10,7 +10,7 @@ RUN mvn clean package -DskipTests
 
 FROM quay.io/keycloak/keycloak:26.5.7 AS runtime
 
-ARG VERSION=1.0.0
+ARG VERSION=1.0.2
 
 LABEL org.opencontainers.image.source="https://github.com/unifesspa-edu-br/uniplus-keycloak-providers" \
       org.opencontainers.image.licenses="Apache-2.0" \
