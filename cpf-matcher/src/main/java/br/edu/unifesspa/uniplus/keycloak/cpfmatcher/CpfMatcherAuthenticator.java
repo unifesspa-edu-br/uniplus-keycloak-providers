@@ -49,12 +49,14 @@ public final class CpfMatcherAuthenticator extends AbstractIdpAuthenticator {
         if (match.isPresent()) {
             MatchResult result = match.get();
             if (result.viaFallback()) {
-                LOG.infof("CPF matcher: matching via fallback (LDAP malformado) — username='%s', aplicando auto-heal",
-                    result.user().getUsername());
+                // userId (UUID interno do Keycloak) em vez de username — username
+                // no LDAP institucional é nome.sobrenome, dado pessoal LGPD.
+                LOG.infof("CPF matcher: matching via fallback (LDAP malformado) — userId='%s', aplicando auto-heal",
+                    result.user().getId());
                 applyAutoHeal(result.user(), cpf);
             } else {
-                LOG.infof("CPF matcher: matching direto (formato canônico) — username='%s'",
-                    result.user().getUsername());
+                LOG.infof("CPF matcher: matching direto (formato canônico) — userId='%s'",
+                    result.user().getId());
             }
             registerExistingUser(context, result.user());
         } else {
@@ -157,9 +159,9 @@ public final class CpfMatcherAuthenticator extends AbstractIdpAuthenticator {
         try {
             user.setSingleAttribute(CPF_USER_ATTRIBUTE, canonicalCpf.value());
         } catch (RuntimeException e) {
-            LOG.warnf("CPF matcher: auto-heal falhou para username='%s' (cpf=%s) — storage read-only ou indisponível (%s). "
+            LOG.warnf("CPF matcher: auto-heal falhou para userId='%s' (cpf=%s) — storage read-only ou indisponível (%s). "
                 + "Prosseguindo com o matching; correção definitiva exige migração no LDAP de origem.",
-                user.getUsername(), canonicalCpf.masked(), e.getClass().getSimpleName());
+                user.getId(), canonicalCpf.masked(), e.getClass().getSimpleName());
         }
     }
 
