@@ -35,19 +35,22 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           minor="${version%.*}"
           jar="cpf-matcher/target/cpf-matcher-${version}.jar"
+          artifact_dir="$(dirname "$jar")"
+          artifact_name="$(basename "$jar")"
+          checksum="${jar}.sha256"
 
           if [ ! -f "$jar" ]; then
             echo "::error::JAR esperado não encontrado: $jar"
             exit 1
           fi
 
-          sha256sum "$jar" > "${jar}.sha256"
+          (cd "$artifact_dir" && sha256sum "$artifact_name") > "$checksum"
 
           {
             echo "version=$version"
             echo "minor=$minor"
             echo "jar=$jar"
-            echo "checksum=${jar}.sha256"
+            echo "checksum=$checksum"
             echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER}/uniplus-keycloak"
           } >> "$GITHUB_OUTPUT"
 
