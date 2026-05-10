@@ -32,8 +32,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Tag scheme: v<KC-VERSION>-<PATCH-PROVIDERS>, ex.: v26.6.1-0
+          # version    = 26.6.1-0  (release imutável; pinning estrito)
+          # kc_patch   = 26.6.1    (soft-pin: último patch dos providers Uni+ sobre KC 26.6.1)
           version="${GITHUB_REF_NAME#v}"
-          minor="${version%.*}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' não bate com o scheme esperado v<KC>-<PATCH> (ex.: v26.6.1-0). Sem -<PATCH>, a soft-pin :<KC> colidiria com a release imutável."
+            exit 1
+          fi
+          kc_patch="${version%-*}"
           jar="cpf-matcher/target/cpf-matcher-${version}.jar"
           artifact_dir="$(dirname "$jar")"
           artifact_name="$(basename "$jar")"
@@ -48,7 +55,7 @@ jobs:
 
           {
             echo "version=$version"
-            echo "minor=$minor"
+            echo "kc_patch=$kc_patch"
             echo "jar=$jar"
             echo "checksum=$checksum"
             echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER}/uniplus-keycloak"
@@ -88,5 +95,5 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
           tags: |
             ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
-            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.minor }}
+            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.kc_patch }}
             ${{ steps.version.outputs.image }}:latest
