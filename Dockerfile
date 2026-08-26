@@ -8,9 +8,9 @@ COPY cpf-matcher/src cpf-matcher/src
 
 RUN mvn clean package -DskipTests
 
-FROM quay.io/keycloak/keycloak:26.6.4 AS runtime
+FROM quay.io/keycloak/keycloak:26.7.2 AS runtime
 
-ARG VERSION=26.6.4-0
+ARG VERSION=26.7.2-0
 
 LABEL org.opencontainers.image.source="https://github.com/unifesspa-edu-br/uniplus-keycloak-providers" \
       org.opencontainers.image.licenses="Apache-2.0" \
