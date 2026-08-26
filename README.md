@@ -12,7 +12,7 @@ Providers customizados em Java SPI para o **Keycloak** institucional da platafor
 
 - **Java:** 21 LTS
 - **Build:** Maven 3.9+
-- **Keycloak alvo:** 26.6.4
+- **Keycloak alvo:** 26.7.2
 
 ## Build
 
@@ -35,22 +35,22 @@ Em **homologação/produção**, o JAR é incluído na imagem Docker do Keycloak
 A imagem oficial de consumo dos providers Uni+ é publicada no GHCR:
 
 ```bash
-docker pull ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.6.4-0
+docker pull ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.7.2-0
 ```
 
 ### Tag scheme
 
 `ghcr.io/unifesspa-edu-br/uniplus-keycloak:<KC-VERSION>-<PATCH>` onde:
 
-- `<KC-VERSION>` = versão exata do Keycloak base (ex.: `26.6.4`)
+- `<KC-VERSION>` = versão exata do Keycloak base (ex.: `26.7.2`)
 - `<PATCH>` = revisão dos providers Uni+ sobre essa base (`-0`, `-1`, `-2`, …)
 
 A cada release, três tags Docker são publicadas:
 
 | Tag | Aponta para | Uso |
 |---|---|---|
-| `:26.6.4-0` | release imutável | pinning estrito (PROD, HML) |
-| `:26.6.4` | último patch dos providers Uni+ sobre KC `26.6.4` | soft-pin dentro da mesma KC version |
+| `:26.7.2-0` | release imutável | pinning estrito (PROD, HML) |
+| `:26.7.2` | último patch dos providers Uni+ sobre KC `26.7.2` | soft-pin dentro da mesma KC version |
 | `:latest` | última release publicada | dev/exploração |
 
 > **Migração do scheme legado `:1.x`** — descontinuado a partir de `26.6.1-0`. Tags `:1.0.x` continuam pulláveis no GHCR mas não recebem atualizações. Migrar pinning para `:<KC>-<PATCH>`.
@@ -60,7 +60,7 @@ A cada release, três tags Docker são publicadas:
 Para **DEV**, substitua a imagem base do Keycloak no `docker-compose.yml` do `uniplus-api`:
 
 ```yaml
-image: ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.6.4-0
+image: ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.7.2-0
 ```
 
 O caminho legacy de desenvolvimento local continua suportado para quem trabalha no SPI: compilar o JAR com Maven e montar o arquivo gerado em `/opt/keycloak/providers/`.
@@ -68,38 +68,67 @@ O caminho legacy de desenvolvimento local continua suportado para quem trabalha 
 Para **HML/PRD/standalone**, o Helm chart deve apontar para a mesma imagem versionada:
 
 ```text
-ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.6.4-0
+ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.7.2-0
 ```
 
 A imagem precisa ficar pública após o primeiro push, porque o repositório é público e os ambientes não devem depender de autenticação para pull. No GitHub, confira em **Packages > uniplus-keycloak > Package settings > Danger Zone > Change visibility** e ajuste para **Public** se necessário.
 
 ## Como fazer release
 
-1. Ajustar o `pom.xml` (raiz e `cpf-matcher/pom.xml`), o `Dockerfile` (`ARG VERSION`) e o `<keycloak.version>` em `pom.xml` para a próxima versão alinhada ao Keycloak alvo (`<KC>-<PATCH>`).
+1. Ajustar os cinco pontos de versão para a próxima release alinhada ao Keycloak alvo (`<KC>-<PATCH>`): `<version>` do `pom.xml` raiz, `<version>` do `<parent>` em `cpf-matcher/pom.xml`, `ARG VERSION` no `Dockerfile`, `<keycloak.version>` no `pom.xml` raiz e o `FROM quay.io/keycloak/keycloak:<KC>` no `Dockerfile`. Os dois últimos só mudam quando a base do Keycloak muda — e precisam mudar **juntos**, senão o provider compila contra uma versão de SPI diferente da que roda no container.
 2. Executar `mvn clean package` e validar os testes.
 3. Fazer commit e push da alteração.
 4. Criar e enviar a tag:
 
 ```bash
-git tag v26.6.4-0
-git push origin v26.6.4-0
+git tag v26.7.2-0
+git push origin v26.7.2-0
 ```
 
-O workflow `.github/workflows/release.yml` dispara automaticamente para tags `v*.*.*`, valida o formato `v<KC>-<PATCH>` e — se válido — publica o JAR e o checksum SHA-256 no GitHub Release e envia a imagem Docker para o GHCR com as tags `26.6.4-0`, `26.6.4` e `latest`. Tags fora do formato (ex.: `v26.6.4` sem `-<PATCH>`) abortam o workflow para evitar colisão entre release imutável e soft-pin.
+O workflow `.github/workflows/release.yml` dispara automaticamente para tags `v*.*.*`, valida o formato `v<KC>-<PATCH>` e — se válido — publica o JAR e o checksum SHA-256 no GitHub Release e envia a imagem Docker para o GHCR com as tags `26.7.2-0`, `26.7.2` e `latest`. Tags fora do formato (ex.: `v26.7.2` sem `-<PATCH>`) abortam o workflow para evitar colisão entre release imutável e soft-pin.
 
-Após a release, faça um novo commit bumpando os 3 arquivos de versão (`pom.xml`, `cpf-matcher/pom.xml`, `Dockerfile` `ARG VERSION`) para a próxima `-SNAPSHOT` esperada — ex.: `26.6.4-1-SNAPSHOT` se planejar nova patch dos providers sobre o mesmo KC 26.6.4, ou `26.7.0-0-SNAPSHOT` se for acompanhar bump do Keycloak. Isso evita que `mvn package` local regenere artefato com versão idêntica à release publicada.
+Após a release, faça um novo commit bumpando a versão para a próxima `-SNAPSHOT` esperada. Isso
+evita que `mvn package` local regenere artefato com versão idêntica à release publicada.
+
+**Nova patch dos providers sobre o mesmo Keycloak** (ex.: `26.7.2-1-SNAPSHOT`) — três pontos:
+
+- `pom.xml` → `<version>`
+- `cpf-matcher/pom.xml` → `<version>` do `<parent>`
+- `Dockerfile` → `ARG VERSION`
+
+**Acompanhando bump do Keycloak** (ex.: `26.8.0-0-SNAPSHOT`) — os três acima **e mais dois**, sem
+os quais a imagem sai tagueada com a versão nova rodando o Keycloak antigo:
+
+- `pom.xml` → `<keycloak.version>` (versão das SPIs contra as quais o provider compila)
+- `Dockerfile` → `FROM quay.io/keycloak/keycloak:<KC>` (base efetiva do runtime)
+
+Antes de fixar o alvo, confirme que a tag existe no registry upstream — as correções publicadas em
+branches do Red Hat Build of Keycloak não têm contrapartida em `quay.io/keycloak/keycloak`.
 
 ## Verificação pós-release
 
-Após publicar `v26.6.4-0`, valide:
+Após publicar `v26.7.2-0`, valide:
 
 ```bash
-curl -L -o cpf-matcher-26.6.4-0.jar https://github.com/unifesspa-edu-br/uniplus-keycloak-providers/releases/download/v26.6.4-0/cpf-matcher-26.6.4-0.jar
-docker pull ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.6.4-0
-docker run --rm ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.6.4-0 show-config
+curl -L -o cpf-matcher-26.7.2-0.jar https://github.com/unifesspa-edu-br/uniplus-keycloak-providers/releases/download/v26.7.2-0/cpf-matcher-26.7.2-0.jar
+docker pull ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.7.2-0
+docker run --rm ghcr.io/unifesspa-edu-br/uniplus-keycloak:26.7.2-0 show-config
 ```
 
-Ao iniciar o Keycloak em ambiente de teste, confirme nos logs que o provider `cpf-matcher` foi carregado.
+Ao iniciar o Keycloak em ambiente de teste, confirme que o provider foi registrado — consultar a
+lista de authenticators é determinístico, o log não é:
+
+```bash
+token=$(curl -s -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
+  -d grant_type=password -d client_id=admin-cli -d "username=$KC_ADMIN" -d "password=$KC_ADMIN_PASSWORD" \
+  | jq -r .access_token)
+curl -s -H "Authorization: Bearer $token" "$KC_URL/admin/realms/master/authentication/authenticator-providers" \
+  | jq '.[] | select(.id == "uniplus-cpf-matcher")'
+```
+
+O provider ausente devolve saída vazia. No log de arranque, a linha `KC-SERVICES0047` citando
+`uniplus-cpf-matcher` confirma que o JAR foi lido — é aviso esperado, não erro: o Keycloak marca
+assim todo provider que implementa a SPI interna `authenticator`.
 
 ## Estrutura
 

@@ -1,6 +1,6 @@
 # cpf-matcher
 
-Authenticator SPI para Keycloak 26.5 que faz matching tolerante por **CPF** entre identidades federadas (gov.br) e users existentes no realm — incluindo o caso do LDAP institucional Unifesspa com `brPersonCPF` truncado em 10 dígitos.
+Authenticator SPI para Keycloak 26.7 que faz matching tolerante por **CPF** entre identidades federadas (gov.br) e users existentes no realm — incluindo o caso do LDAP institucional Unifesspa com `brPersonCPF` truncado em 10 dígitos.
 
 ## Por que existe
 
@@ -44,7 +44,7 @@ Em **todos** os caminhos (encontrou ou não), o Authenticator chama `context.att
 mvn clean package
 ```
 
-Gera `cpf-matcher/target/cpf-matcher-1.0.0-SNAPSHOT.jar`.
+Gera `cpf-matcher/target/cpf-matcher-26.7.2-0.jar`.
 
 ## Como deployar (dev local)
 
@@ -53,7 +53,7 @@ O `docker-compose.yml` do **uniplus-api** monta o JAR em `/opt/keycloak/provider
 ```yaml
 keycloak:
   volumes:
-    - ../uniplus-keycloak-providers/cpf-matcher/target/cpf-matcher-1.0.0-SNAPSHOT.jar:/opt/keycloak/providers/cpf-matcher.jar
+    - ../uniplus-keycloak-providers/cpf-matcher/target/cpf-matcher-26.7.2-0.jar:/opt/keycloak/providers/cpf-matcher.jar
   command: ["start-dev", "--import-realm"]
 ```
 
@@ -97,9 +97,12 @@ Testes unitários cobrem:
 Nível **info** registra qual tentativa de matching funcionou:
 
 ```
-CPF matcher: user existente encontrado por CPF canônico (11 dig) — username='lara.almeida'
-CPF matcher: user existente encontrado via fallback LDAP malformado (10 dig) — username='kevin.peixoto'. Aplicando auto-heal do atributo cpf para formato canônico.
+CPF matcher: matching direto (formato canônico) — userId='4f1c9a2e-...'
+CPF matcher: matching via fallback (LDAP malformado) — userId='9b0d7e51-...', aplicando auto-heal
 ```
+
+O identificador registrado é o `userId` (UUID interno do Keycloak), nunca o `username` — no LDAP
+institucional o username é `nome.sobrenome`, dado pessoal sob a LGPD.
 
 Nível **debug** registra os casos em que delega ao próximo executor.
 
