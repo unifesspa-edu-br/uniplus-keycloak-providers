@@ -6,7 +6,7 @@
 
     <groupId>br.edu.unifesspa.uniplus</groupId>
     <artifactId>keycloak-providers</artifactId>
-    <version>26.6.4-0</version>
+    <version>26.7.2-0</version>
     <packaging>pom</packaging>
 
     <name>Uni+ Keycloak Providers</name>
@@ -45,7 +45,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
 
         <!-- Keycloak alvo: alinhado com a imagem GHCR do Uni+ (`uniplus-keycloak:<KC>-<patch>`) -->
-        <keycloak.version>26.6.4</keycloak.version>
+        <keycloak.version>26.7.2</keycloak.version>
 
         <!-- Test stack -->
         <junit.version>5.12.2</junit.version>
